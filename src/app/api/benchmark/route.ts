@@ -7,6 +7,12 @@ import { validateAccountId, getAccountById, isMultiAccount } from '@/lib/app-con
 const RESULTS_DIR = '/tmp/powerpipe-results';
 const MOD_DIR = '/home/ec2-user/awsops/powerpipe';
 
+const ALLOWED_BENCHMARKS = ['cis_v300', 'cis_v200', 'cis_v150', 'cis_v400'] as const;
+type BenchmarkId = typeof ALLOWED_BENCHMARKS[number];
+function isAllowedBenchmark(id: string): id is BenchmarkId {
+  return (ALLOWED_BENCHMARKS as readonly string[]).includes(id);
+}
+
 // Dynamically get Steampipe password (avoid hardcoded mismatch across deployments)
 // Steampipe 비밀번호를 동적으로 가져옴 (배포 환경별 불일치 방지)
 let cachedDbUrl: string | null = null;
@@ -32,7 +38,11 @@ function ensureDir() {
 export async function GET(request: NextRequest) {
   ensureDir();
   const { searchParams } = new URL(request.url);
-  const benchmark = searchParams.get('benchmark') || 'cis_v300';
+  const benchmarkParam = searchParams.get('benchmark') || 'cis_v300';
+  if (!isAllowedBenchmark(benchmarkParam)) {
+    return NextResponse.json({ error: 'Unknown benchmark' }, { status: 400 });
+  }
+  const benchmark: BenchmarkId = benchmarkParam;
   const action = searchParams.get('action') || 'status';
   const accountIdParam = searchParams.get('accountId') || undefined;
   const account = accountIdParam && validateAccountId(accountIdParam) ? getAccountById(accountIdParam) : undefined;
