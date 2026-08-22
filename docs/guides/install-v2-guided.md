@@ -23,8 +23,8 @@ Installs AWSops v2 into the user's AWS account. Supports two scenarios — **fre
 
 판별을 돕는 자동 힌트(참고용, 선택을 대체하지 않음): v1 흔적 = CDK 스택(`aws cloudformation list-stacks`에 v1 스택), `/awsops` basePath로 서빙 중인 CloudFront, EC2의 `data/*.json`.
 
-- **A 선택** → §1~§6 진행 후 종료.
-- **B 선택** → §1~§6(v2를 v1과 **병행으로** 새로 설치) 후 §7 마이그레이션 단계로 계속. v1은 컷오버 전까지 건드리지 않는다.
+- **A 선택** → 1~6단계 진행 후 종료.
+- **B 선택** → 1~6단계(v2를 v1과 **병행으로** 새로 설치) 후 7단계(마이그레이션)로 계속. v1은 컷오버 전까지 건드리지 않는다.
 
 ## 1. 사전 점검 / Prerequisites
 
@@ -46,7 +46,7 @@ make configure   # 대화형 TUI — 사용자가 직접 실행
 ```
 
 TUI가 묻는 것: VPC 신규 vs 기존 재사용, 서비스 도메인(Route53 hosted zone 필요), tfstate S3 버킷, (선택) 온보딩할 EKS 클러스터.
-**시나리오 B 주의**: v2 도메인은 **v1과 다른 도메인/서브도메인으로 시작**한다 (예: v1 `ops.example.com` → v2 `ops-v2.example.com`). 기존 도메인 전환은 §7.4 컷오버에서 런북대로 진행한다.
+**시나리오 B 주의**: v2 도메인은 **v1과 다른 도메인/서브도메인으로 시작**한다 (예: v1 `ops.example.com` → v2 `ops-v2.example.com`). 기존 도메인 전환은 7.4단계(도메인 컷오버)에서 런북대로 진행한다.
 완료 후 `terraform/v2/foundation/terraform.tfvars` + `backend.hcl` 생성을 확인하고, 값이 사용자 의도와 맞는지 읽어서 요약해 준다.
 
 ## 3. 프로비저닝 / Provision
@@ -81,7 +81,7 @@ aws cognito-idp admin-set-user-password --user-pool-id "$POOL" \
 ```
 
 비밀번호는 사용자가 직접 정하게 하고 채팅에 평문으로 남기지 않는다.
-**시나리오 B**: 기존 v1 사용자 명단의 이관·대조는 §7.3에서 런북 절차로 수행한다 — 여기서는 관리자 1명만 만든다.
+**시나리오 B**: 기존 v1 사용자 명단의 이관·대조는 7.3단계(사용자 이관 대조)에서 런북 절차로 수행한다 — 여기서는 관리자 1명만 만든다.
 
 ## 5. 검증 / Verify
 
@@ -104,7 +104,7 @@ aws cognito-idp admin-set-user-password --user-pool-id "$POOL" \
 
 ## 7. v1 → v2 마이그레이션 / Migration (시나리오 B 전용)
 
-v2가 §5까지 검증된 상태에서 시작한다. **각 단계는 전용 런북이 단일 진실** — 스킬은 순서와 게이트만 관리하고, 실행 전 반드시 해당 런북을 읽고 따른다.
+v2가 5단계(검증)까지 통과한 상태에서 시작한다. **각 단계는 전용 런북이 단일 진실** — 스킬은 순서와 게이트만 관리하고, 실행 전 반드시 해당 런북을 읽고 따른다.
 
 ### 7.1 v1 데이터 백업 확보
 
