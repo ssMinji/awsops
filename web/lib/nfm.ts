@@ -7,6 +7,7 @@ import {
   GetQueryStatusMonitorTopContributorsCommand,
   GetQueryResultsMonitorTopContributorsCommand,
   StopQueryMonitorTopContributorsCommand,
+  GetMonitorCommand,
   type MonitorMetric,
   type DestinationCategory,
 } from '@aws-sdk/client-networkflowmonitor';
@@ -160,6 +161,108 @@ export async function nfmHealthSummary(monitorArn: string, rangeSec: number): Pr
   });
 }
 
+// ── Monitor coverage (모니터가 뭘 감시하는지) ───────────────────────────────
+// GetMonitor의 local/remoteResources — 차트 범례가 모니터 이름만으로는 무의미하다는
+// UX 피드백 반영. 타입은 CFN 접두사를 줄여 표시(shortType), remote 비어있으면 "전체".
+
+export interface NfmCoverageResource { type: string; id: string }
+export interface NfmCoverage { local: NfmCoverageResource[]; remote: NfmCoverageResource[] }
+
+/** 모니터별 감시 대상 맵 — GetMonitor 병렬 배치, 실패 모니터는 맵에서 제외(best-effort). */
+export async function nfmMonitorCoverage(): Promise<Record<string, NfmCoverage>> {
+  return cached('coverage', async () => {
+    const status = await nfmStatus();
+    const entries = await Promise.all(status.monitors.map(async (m) => {
+      try {
+        const res = await nfm().send(new GetMonitorCommand({ monitorName: m.name }));
+        // identifier는 ARN일 수 있음 (실측: vpc는 arn:...:vpc/vpc-xxx) — 마지막 세그먼트만 표시.
+        const map = (rs?: { type?: string; identifier?: string }[]): NfmCoverageResource[] =>
+          (rs ?? []).map((r) => ({ type: shortType(r.type) ?? r.type ?? '', id: (r.identifier ?? '').split('/').pop() ?? '' }));
+        return [m.name, { local: map(res.localResources), remote: map(res.remoteResources) }] as const;
+      } catch {
+        return null;
+      }
+    }));
+    return Object.fromEntries(entries.filter((e): e is NonNullable<typeof e> => e != null));
+  });
+}
+
+// ── Fleet timeline (모니터별 추이 차트) ─────────────────────────────────────
+// 전 모니터 × 5메트릭을 GetMetricData 1콜(+페이지네이션)로 배치 — CW 경로라 monitor
+// 쿼리의 1h 한도와 무관하다 (CW 보관: 1분 15일 / 5분 63일 → 7d 프리셋까지 커버).
+// 모니터 생성 이전 기간은 소급 불가 — 짧은 시리즈는 그대로 노출한다.
+
+export const NFM_TIMELINE_METRIC_KEYS = ['transfer', 'retx', 'timeouts', 'rtt', 'health'] as const;
+export type NfmTimelineMetricKey = (typeof NFM_TIMELINE_METRIC_KEYS)[number];
+const TIMELINE_METRICS: Record<NfmTimelineMetricKey, { name: string; stat: string }> = {
+  transfer: { name: 'DataTransferred', stat: 'Sum' },
+  retx: { name: 'Retransmissions', stat: 'Sum' },
+  timeouts: { name: 'Timeouts', stat: 'Sum' },
+  rtt: { name: 'RoundTripTime', stat: 'Average' }, // µs — 표시 변환은 nfm-format
+  health: { name: 'HealthIndicator', stat: 'Maximum' },
+};
+
+export interface NfmFleetTimeline {
+  available: boolean;
+  rangeSec: number;
+  periodSec: number;
+  /** 포함된 모니터 이름 (ListMonitors 순서, 최대 100 — 콜당 500쿼리 한도). */
+  monitors: string[];
+  /** metric key → monitor name → points. 무데이터 시리즈는 빈 배열. */
+  series: Record<NfmTimelineMetricKey, Record<string, NfmHealthPoint[]>>;
+}
+
+/** 전 모니터의 시계열 배치 조회 — 차트용 ≤ 240 버킷 (7d = 42분 버킷). */
+export async function nfmFleetTimeline(rangeSec: number): Promise<NfmFleetTimeline> {
+  return cached(`fleet|${rangeSec}`, async () => {
+    const status = await nfmStatus();
+    const monitors = status.monitors.filter((m) => m.arn).slice(0, 100);
+    const names = monitors.map((m) => m.name);
+    const periodSec = Math.max(60, Math.ceil(rangeSec / 240 / 60) * 60);
+    const emptySeries = () =>
+      Object.fromEntries(NFM_TIMELINE_METRIC_KEYS.map((k) => [k, {} as Record<string, NfmHealthPoint[]>])) as NfmFleetTimeline['series'];
+    const series = emptySeries();
+    for (const key of NFM_TIMELINE_METRIC_KEYS) for (const n of names) series[key][n] = [];
+    if (!monitors.length) return { available: false, rangeSec, periodSec, monitors: names, series };
+
+    const end = new Date();
+    const start = new Date(end.getTime() - rangeSec * 1000);
+    const queries = monitors.flatMap((m, i) =>
+      NFM_TIMELINE_METRIC_KEYS.map((key) => ({
+        Id: `m${i}_${key}`,
+        MetricStat: {
+          Metric: {
+            Namespace: 'AWS/NetworkFlowMonitor', MetricName: TIMELINE_METRICS[key].name,
+            Dimensions: [{ Name: 'MonitorId', Value: m.arn }],
+          },
+          Period: periodSec, Stat: TIMELINE_METRICS[key].stat,
+        },
+      })));
+
+    let nextToken: string | undefined;
+    let total = 0;
+    do {
+      const res = await cw().send(new GetMetricDataCommand({
+        StartTime: start, EndTime: end, ScanBy: 'TimestampAscending',
+        MetricDataQueries: queries, NextToken: nextToken,
+      }));
+      for (const r of res.MetricDataResults ?? []) {
+        const match = /^m(\d+)_([a-z]+)$/.exec(r.Id ?? '');
+        if (!match) continue;
+        const name = names[Number(match[1])];
+        const key = match[2] as NfmTimelineMetricKey;
+        if (name == null || !(key in TIMELINE_METRICS)) continue;
+        const pts = (r.Timestamps ?? []).map((ts, i) => ({ t: new Date(ts).getTime(), v: r.Values?.[i] ?? 0 }));
+        series[key][name].push(...pts);
+        total += pts.length;
+      }
+      nextToken = res.NextToken;
+    } while (nextToken);
+
+    return { available: total > 0, rangeSec, periodSec, monitors: names, series };
+  });
+}
+
 // ── Monitor top-contributors query (start → poll → results) ────────────────
 interface RawContributor {
   localIp?: string; localInstanceId?: string; localSubnetId?: string; localAz?: string;
@@ -215,15 +318,22 @@ export interface NfmQueryResult { rows: NfmFlowRow[]; unit: string; tookMs: numb
 // 더 긴 기간이 필요하면 nfm-dashboard처럼 수집 파이프라인이 필요하다 — 라이브 조회는 1h가 상한.
 export const NFM_MAX_RANGE_SEC = 3600;
 
-/** One monitor × metric × category top-contributors query over the trailing range (≤ 1h). */
+/**
+ * One monitor × metric × category top-contributors query (window ≤ 1h).
+ * 기본은 trailing range; `window`를 주면 그 과거 창을 조회한다 — 1h 한도는 창 "길이"
+ * 제약일 뿐 과거 시점 조회는 가능 (실측 2026-08-20: 20h 전 창 SUCCEEDED).
+ */
 export async function nfmTopContributors(
   monitor: string, metric: NfmMetric, category: NfmCategory, rangeSec: number, limit = 50,
+  window?: { startMs: number; endMs: number },
 ): Promise<NfmQueryResult> {
-  if (rangeSec > NFM_MAX_RANGE_SEC) throw new Error(`NFM query range max ${NFM_MAX_RANGE_SEC}s (API limit)`);
-  return cached(`q|${monitor}|${metric}|${category}|${rangeSec}|${limit}`, async () => {
+  const spanSec = window ? Math.round((window.endMs - window.startMs) / 1000) : rangeSec;
+  if (spanSec > NFM_MAX_RANGE_SEC) throw new Error(`NFM query range max ${NFM_MAX_RANGE_SEC}s (API limit)`);
+  const windowKey = window ? `${window.startMs}-${window.endMs}` : `r${rangeSec}`;
+  return cached(`q|${monitor}|${metric}|${category}|${windowKey}|${limit}`, async () => {
     const t0 = Date.now();
-    const end = new Date();
-    const start = new Date(end.getTime() - rangeSec * 1000);
+    const end = window ? new Date(window.endMs) : new Date();
+    const start = window ? new Date(window.startMs) : new Date(end.getTime() - rangeSec * 1000);
     const { queryId } = await nfm().send(new StartQueryMonitorTopContributorsCommand({
       monitorName: monitor, metricName: metric as MonitorMetric,
       destinationCategory: category as DestinationCategory,
