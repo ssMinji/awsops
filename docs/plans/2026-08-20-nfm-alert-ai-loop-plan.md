@@ -5,7 +5,11 @@
 > Posture: 전부 read-only + governed SNS notify (notify.tf/ADR-040·041 선례 클래스). **CW Alarm 생성 금지(ADR-005 — AWS 리소스 변경)** — 임계 평가는 자체 워커 Lambda가 수행. AWS mutation/autonomy 없음.
 > 고객 언급 제약(참고): NFM은 inside-of-AWS만 커버, NLB TCP 세션 타임아웃 미제공 — NLB 보완 섹션은 별도 후속(Out of scope).
 
-## W1 — 7일 모니터 추이 차트 (web only, tf 없음)
+## W1 — 7일 모니터 추이 차트 (web only, tf 없음) — ✅ 완료 (2026-08-20~22, 실브라우저 검증)
+
+> 구현 중 확장: 4패널 동시 그리드 + Max/Mean/Last 통계 범례(Grafana 패리티) + 커서 동기화
+> + 모니터 커버리지 배지 + **스파이크 클릭 → 그 시점 1h 창으로 플로우 조회 드릴다운**
+> (실측: monitor 쿼리 1h 캡은 창 길이 제약일 뿐, 과거 창 조회 가능).
 
 Grafana 영상1과 동등한 뷰: 모니터(=페어)별 멀티 시리즈, 최대 7일.
 
@@ -14,7 +18,14 @@ Grafana 영상1과 동등한 뷰: 모니터(=페어)별 멀티 시리즈, 최대
 - 페이지: HealthBand 아래 "모니터별 추이" 카드 — 메트릭 셀렉트 + 모니터별 멀티 시리즈 차트 + **/GB 정규화 토글**(재전송·타임아웃을 DataTransferred로 나눔 — 원조 dashboard의 "에러 신호 /GB" 패널 채용; 트래픽 증가에 따른 절대 건수 착시 제거).
 - 기간 프리셋: 1h/6h/24h/7d — **쿼리 패널의 `NFM_RANGE_PRESETS`(1h 캡)와 분리** (1h 캡은 top-contributors 라이브 쿼리 한도일 뿐, CW 경로는 무관). 7d는 CW 5-min 해상도(63일 내) — period 자동 산정은 `nfmHealthSummary` 로직 일반화.
 
-## W2 — 임계 평가 + SNS 알림 (`nfm_alerts_enabled` 게이트, default false)
+## ~~W2 — 임계 평가 + SNS 알림~~ — **드롭 (owner 결정 2026-08-22)**
+
+> 알림 기능은 넣지 않기로 결정. 아래 설계는 재개 시 참고용으로만 보존 — W2가 빠지면서
+> W3의 알림 딥링크 착지(`?monitor=` 프리필)도 불필요해져 미구현으로 남긴다.
+> 루프의 "감지" 단계는 당분간 사람이 추이 차트에서 스파이크를 보고 클릭하는 것으로 대체
+> (W1의 스파이크 클릭 → 시점 창 드릴다운 + W3 챗 분석이 그 동선).
+
+<details><summary>보존된 원안</summary>
 
 Grafana 알림 룰의 기능 등가물 — CW Alarm 생성 없이.
 
@@ -25,7 +36,9 @@ Grafana 알림 룰의 기능 등가물 — CW Alarm 생성 없이.
 - Dedup/cooldown 상태: `nfm_alert_state` 테이블 (schema v10 마이그레이션 — monitor, metric, last_fired_at, last_value; cooldown 내 재발화 억제)
 - terraform (`notify.tf` 확장 또는 `nfm-alerts.tf` 신규): Lambda + EventBridge rule + IAM(`cloudwatch:GetMetricData`, `networkflowmonitor:ListMonitors`, 기존 토픽 한정 `sns:Publish`, SSM read) — 전부 `nfm_alerts_enabled` count 게이트 → OFF=0리소스/$0, plan=No changes. apply는 컨트롤러.
 
-## W3 — `nfm-analyze` 콜렉터 (auto-collect 7번째)
+</details>
+
+## W3 — `nfm-analyze` 콜렉터 (auto-collect 7번째) — ✅ 완료 (2026-08-22, 라이브 E2E 검증)
 
 고객의 clabana-nfm-bot 등가물 — 챗 안에서.
 
