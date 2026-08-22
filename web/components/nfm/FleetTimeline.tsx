@@ -14,7 +14,7 @@ import {
 import type { NfmCoverage, NfmTimelineMetricKey } from '@/lib/nfm';
 
 // 모니터별 추이 — GET /api/nfm/timeline (전 모니터 × 5메트릭 CW 배치, lib/nfm.ts).
-// Grafana 패리티 2가지를 채택 (2026-08-13 고객 데모 대조): ① 메트릭 4패널 동시
+// Grafana 패리티 2가지를 채택 (실사용 사례 대조): ① 메트릭 4패널 동시
 // 그리드(전환 없이 한눈 비교) ② 범례 = 통계 테이블(Max/Mean/Last — 시리즈가 많아도
 // 최악 페어가 랭킹으로 보임). 기간은 CW 경로 전용 프리셋(15m~7d) — 쿼리 패널의
 // 1h 캡과 무관. /GB 정규화는 타임아웃·재전송에만 (트래픽 증가에 따른 착시 제거).
