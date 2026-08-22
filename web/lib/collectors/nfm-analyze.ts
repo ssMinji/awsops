@@ -1,5 +1,5 @@
-// Network Flow Analyzer collector — the chat-side equivalent of the customer's `nfm-analyze`
-// Slack bot (2026-08-13 demo): NFM 상태 요약 → 악화 모니터 선별 → 그 모니터의 top-contributor
+// Network Flow Analyzer collector — the chat-side equivalent of a field-proven `nfm-analyze`
+// Slack-bot workflow: NFM 상태 요약 → 악화 모니터 선별 → 그 모니터의 top-contributor
 // 플로우(어느 pod/서브넷 페어가 원인인지)를 수집해 Bedrock 분석으로 넘긴다.
 // 데이터원은 전부 lib/nfm.ts (TTL 캐시 + in-flight dedupe 재사용) — Steampipe 불필요.
 import {
