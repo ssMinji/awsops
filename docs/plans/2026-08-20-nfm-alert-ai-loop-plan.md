@@ -1,9 +1,9 @@
 # Plan — NFM 임계 알림 + AI 분석 루프 + 7일 모니터 추이 차트
 
-> 원천 / Source: 고객 실사용 증거 (2026-08-13 데모 — Grafana 7d 페어-모니터 대시보드[live2/live3/dmz Timeouts·HealthIndicator·Retransmissions] + Slack "[NFM] TCP Timeout threshold exceeded" 임계 알림[출발지/목적지 페어+건수+차트] + 스레드 내 `nfm-analyze <monitor arn>` AI 봇 분석) + 원조 nfm-dashboard(CloudFront) 기능 대조.
-> 핵심 통찰: 고객의 Grafana 데이터원은 특별한 게 아니라 **페어별 NFM 모니터가 발행하는 CW `AWS/NetworkFlowMonitor` 메트릭** — awsops HealthBand가 이미 쓰는 경로. 부족한 건 ①7일 멀티모니터 차트 ②임계 평가+알림 ③알림→AI 분석 동선 세 조각.
+> 원천 / Source: 실사용 사례에서 검증된 워크플로우 (페어별 NFM 모니터가 발행하는 CW 메트릭의 Grafana 시각화 + 타임아웃 임계 알림[출발지/목적지 페어+건수+차트] + 알림 스레드에서 AI 분석 봇 호출) + 원조 nfm-dashboard(CloudFront) 기능 대조.
+> 핵심 통찰: 그 Grafana 데이터원은 특별한 게 아니라 **페어별 NFM 모니터가 발행하는 CW `AWS/NetworkFlowMonitor` 메트릭** — awsops HealthBand가 이미 쓰는 경로. 부족한 건 ①7일 멀티모니터 차트 ②임계 평가+알림 ③알림→AI 분석 동선 세 조각.
 > Posture: 전부 read-only + governed SNS notify (notify.tf/ADR-040·041 선례 클래스). **CW Alarm 생성 금지(ADR-005 — AWS 리소스 변경)** — 임계 평가는 자체 워커 Lambda가 수행. AWS mutation/autonomy 없음.
-> 고객 언급 제약(참고): NFM은 inside-of-AWS만 커버, NLB TCP 세션 타임아웃 미제공 — NLB 보완 섹션은 별도 후속(Out of scope).
+> 실무 제약(참고): NFM은 inside-of-AWS만 커버, NLB TCP 세션 타임아웃 미제공 — NLB 보완 섹션은 별도 후속(Out of scope).
 
 ## W1 — 7일 모니터 추이 차트 (web only, tf 없음) — ✅ 완료 (2026-08-20~22, 실브라우저 검증)
 
@@ -40,7 +40,7 @@ Grafana 알림 룰의 기능 등가물 — CW Alarm 생성 없이.
 
 ## W3 — `nfm-analyze` 콜렉터 (auto-collect 7번째) — ✅ 완료 (2026-08-22, 라이브 E2E 검증)
 
-고객의 clabana-nfm-bot 등가물 — 챗 안에서.
+필드에서 검증된 알림-스레드 분석 봇의 등가물 — 챗 안에서.
 
 - `web/lib/collectors/nfm-analyze.ts` — 레지스트리 계약(등록 한 줄):
   - `available()`: `nfmStatus()` 모니터 ≥ 1
@@ -56,7 +56,7 @@ Grafana 알림 룰의 기능 등가물 — CW Alarm 생성 없이.
 
 - 서브넷/AZ 페어 **집계 뷰** (백로그 #2 — 별도 소작업)
 - Workload Insights 계정 전체 뷰 (별도 항목)
-- **NLB TCP 타임아웃 보완 섹션** (고객 pain — NFM 커버리지 밖; NLB CW 메트릭 기반 별도 계획)
+- **NLB TCP 타임아웃 보완 섹션** (실무 pain — NFM 커버리지 밖; NLB CW 메트릭 기반 별도 계획)
 - Slack 양방향 봇 (v1은 SNS 이메일 + 딥링크)
 - CW Alarm 생성 (ADR-005 FROZEN — 영구 제외)
 - 히스토리 수집 파이프라인 (CW 보관 15개월로 7d 요구 충족 — 불필요)
