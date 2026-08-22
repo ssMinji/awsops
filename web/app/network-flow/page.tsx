@@ -1,5 +1,5 @@
 'use client';
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { Activity, Boxes, Globe, Loader2, Radar } from 'lucide-react';
 import PageHeader from '@/components/ui/PageHeader';
 import Card from '@/components/ui/Card';
@@ -13,6 +13,7 @@ import type { NfmEndpoint, NfmFlowRow } from '@/lib/nfm';
 import type { InvType } from '@/lib/inventory-types';
 import FlowHopPath, { ResourceIcon, endpointKind } from '@/components/nfm/FlowHopPath';
 import HealthBand from '@/components/nfm/HealthBand';
+import FleetTimeline from '@/components/nfm/FleetTimeline';
 import { NFM_RANGE_PRESETS } from '@/lib/nfm-format';
 
 // /network-flow — nfm-dashboard 플로우 조회 이식 (CloudWatch Network Flow Monitor).
@@ -137,6 +138,9 @@ export default function NetworkFlowPage() {
   const [metric, setMetric] = useState('DATA_TRANSFERRED');
   const [category, setCategory] = useState('INTER_AZ');
   const [range, setRange] = useState(3600);
+  // 추이 차트 스파이크 클릭이 지정한 과거 조회 창 (epoch ms). null이면 trailing range.
+  const [timeWin, setTimeWin] = useState<{ start: number; end: number } | null>(null);
+  const queryCardRef = useRef<HTMLDivElement>(null);
   const [result, setResult] = useState<QueryResp | null>(null);
   const [busy, setBusy] = useState(false);
   const [queryErr, setQueryErr] = useState('');
@@ -162,7 +166,8 @@ export default function NetworkFlowPage() {
     if (!monitor) return;
     let alive = true;
     setBusy(true); setQueryErr(''); setSelected(null);
-    const qs = `monitor=${encodeURIComponent(monitor)}&metric=${metric}&category=${category}&range=${range}`;
+    const win = timeWin ? `&start=${timeWin.start}&end=${timeWin.end}` : '';
+    const qs = `monitor=${encodeURIComponent(monitor)}&metric=${metric}&category=${category}&range=${range}${win}`;
     fetch(`/api/nfm/query?${qs}`)
       .then(async (r) => {
         const d = await r.json().catch(() => null);
@@ -173,7 +178,19 @@ export default function NetworkFlowPage() {
       .catch((e) => { if (alive) setQueryErr(e instanceof Error ? e.message : String(e)); })
       .finally(() => { if (alive) setBusy(false); });
     return () => { alive = false; };
-  }, [monitor, metric, category, range]);
+  }, [monitor, metric, category, range, timeWin]);
+
+  // 추이 차트 포인트 클릭 → 그 시점 ±30분(1h 창, 현재로 클램프)으로 플로우 조회 + 스크롤.
+  const onTimelinePoint = (tMs: number, queryMetric: string) => {
+    const end = Math.min(tMs + 1_800_000, Date.now());
+    setMetric(queryMetric);
+    setTimeWin({ start: end - 3_600_000, end });
+    queryCardRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  };
+  const fmtWin = (ms: number) => {
+    const d = new Date(ms);
+    return `${d.getMonth() + 1}/${d.getDate()} ${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
+  };
 
   const monitors = status?.monitors ?? [];
   const activeCount = monitors.filter((m) => m.status === 'ACTIVE').length;
@@ -271,6 +288,10 @@ export default function NetworkFlowPage() {
             {/* 상태 요약 밴드 — 선택 모니터의 CW 메트릭 요약 (모니터/기간 변경 시 재조회) */}
             {onboarded && monitor && <HealthBand monitor={monitor} range={range} />}
 
+            {/* 모니터별 추이 — 전 모니터 CW 시계열 (자체 기간 프리셋 15m~7d, 쿼리 1h 캡과 무관).
+                포인트 클릭 → 그 시점 1h 창으로 아래 플로우 조회 연동 */}
+            {onboarded && <FleetTimeline onPointClick={onTimelinePoint} />}
+
             {/* NFM 미온보딩 — amber 안내로 degrade, 쿼리 패널 숨김 */}
             {!onboarded && (
               <div className="flex flex-col gap-1.5 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-[12.5px] text-amber-700">
@@ -281,10 +302,28 @@ export default function NetworkFlowPage() {
             )}
 
             {onboarded && (
+              <div ref={queryCardRef} className="scroll-mt-4">
               <Card
                 title="플로우 조회"
                 subtitle="모니터 × 메트릭 × 카테고리 top-contributors — 파라미터 변경 시 자동 재조회"
-                right={<RangePicker value={range} onChange={setRange} ranges={NFM_RANGES} />}
+                right={
+                  <div className="flex items-center gap-2">
+                    {timeWin && (
+                      <span className="inline-flex items-center gap-1.5 rounded-md border border-brand-300 bg-brand-500/10 px-2 py-1 text-[11.5px] font-medium text-brand-700">
+                        {fmtWin(timeWin.start)} ~ {fmtWin(timeWin.end)}
+                        <button
+                          type="button"
+                          onClick={() => setTimeWin(null)}
+                          title={tt('시점 창 해제 — 최근 기간 조회로 복귀')}
+                          className="text-brand-700/70 hover:text-brand-700"
+                        >
+                          ×
+                        </button>
+                      </span>
+                    )}
+                    <RangePicker value={range} onChange={(sec) => { setTimeWin(null); setRange(sec); }} ranges={NFM_RANGES} />
+                  </div>
+                }
                 padded={false}
               >
                 {/* 쿼리 파라미터 + 실행 상태 */}
@@ -349,7 +388,13 @@ export default function NetworkFlowPage() {
                     items={result.rows}
                     rowKey={(r, i) => `${i}|${epLabel(r.local) ?? ''}|${epLabel(r.remote) ?? ''}|${r.targetPort ?? ''}`}
                     defaultSortKey="value"
-                    emptyText="해당 기간/카테고리에 플로우 없음"
+                    // RTT는 플로우별 집계가 비는 환경이 있음 (CW 모니터 집계와 달리 TCP 샘플 필요 —
+                    // 실측: 데모 환경에서 전 카테고리·전 기간 0행). 빈 결과가 "연동 고장"으로 읽히지 않게 안내.
+                    emptyText={metric === 'ROUND_TRIP_TIME'
+                      ? '플로우별 RTT 기록 없음 — 추이 차트의 RTT는 모니터 전체 평균(CW)이라 값이 있어도, 개별 플로우의 RTT는 TCP 왕복 샘플이 충분할 때만 기록됩니다. 어떤 플로우인지 보려면 메트릭을 전송량·재전송으로 바꿔보세요'
+                      : timeWin
+                        ? '해당 시점 창의 이 메트릭·카테고리 조합에 플로우 없음 — 카테고리를 바꿔보세요'
+                        : '해당 기간/카테고리에 플로우 없음'}
                     onRowClick={setSelected}
                   />
                 ) : (
@@ -358,6 +403,7 @@ export default function NetworkFlowPage() {
                   </div>
                 )}
               </Card>
+              </div>
             )}
           </>
         )}
