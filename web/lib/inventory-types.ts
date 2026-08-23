@@ -507,6 +507,8 @@ const GROUPS: Record<string, GroupMeta> = {
       { key: 'ip-addresses', href: '/ip-addresses', labelKey: 'nav.ipAddresses' },
       // VPC Endpoint 리스트+분석 (PrivateLink 메트릭 기반 미사용 감지, 커버리지 갭)
       { key: 'vpc-endpoints', href: '/vpc-endpoints', labelKey: 'nav.vpcEndpoints' },
+      // Direct Connect 복원력 평가 (SLA 티어 판정 + 권고 — lib/dx-engine)
+      { key: 'dx-resilience', href: '/dx-resilience', labelKey: 'nav.dxResilience' },
     ],
     subgroups: [
       { key: 'loadBalancing', labelKey: 'group.network.loadBalancing', types: ['alb', 'nlb', 'target_group', 'alb_listener_rule'] },

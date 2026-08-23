@@ -7,6 +7,24 @@ import type { Lang } from './i18n';
 type Pair = { en: string; zh: string; ja: string };
 
 export const TERMS: Record<string, Pair> = {
+  // ---- DX Resilience (/dx-resilience) ----
+  'Direct Connect 복원력 평가 — SLA 티어 판정과 목표 티어까지의 권고 (read-only)': { en: 'Direct Connect resilience assessment — SLA tier verdict and recommendations toward the target tier (read-only)', zh: 'Direct Connect 弹性评估 — SLA 层级判定与达到目标层级的建议（只读）', ja: 'Direct Connect レジリエンス評価 — SLA ティア判定と目標ティアへの推奨（read-only）' },
+  'DX 평가 조회 실패': { en: 'DX assessment fetch failed', zh: 'DX 评估查询失败', ja: 'DX 評価の取得失敗' },
+  '종합 티어': { en: 'Overall tier', zh: '综合层级', ja: '総合ティア' },
+  '일부 소스 조회 실패 — 결과가 불완전할 수 있습니다': { en: 'Some sources failed — results may be incomplete', zh: '部分数据源查询失败 — 结果可能不完整', ja: '一部ソースの取得失敗 — 結果が不完全な可能性' },
+  'Direct Connect 미사용': { en: 'Direct Connect not in use', zh: '未使用 Direct Connect', ja: 'Direct Connect 未使用' },
+  '이 계정에서 DX 연결·VIF·게이트웨이가 발견되지 않았습니다. DX를 온보딩하면 SLA 티어 평가와 복원력 권고가 활성화됩니다.': { en: 'No DX connections, VIFs, or gateways were found in this account. Onboarding Direct Connect enables SLA tier assessment and resilience recommendations.', zh: '此账户中未发现 DX 连接、VIF 或网关。接入 Direct Connect 后即可启用 SLA 层级评估与弹性建议。', ja: 'このアカウントで DX 接続・VIF・ゲートウェイが見つかりませんでした。Direct Connect をオンボードすると SLA ティア評価とレジリエンス推奨が有効になります。' },
+  'DX Gateway별 평가': { en: 'Per-DX-Gateway assessment', zh: '按 DX Gateway 评估', ja: 'DX Gateway 別評価' },
+  '게이트웨이 단위 SLA 티어 판정 — 목표 티어까지 필요한 추가 구성이 권고로 표시됩니다': { en: 'SLA tier verdict per gateway — the additions needed to reach the target tier appear as recommendations', zh: '按网关判定 SLA 层级 — 达到目标层级所需的新增配置将显示为建议', ja: 'ゲートウェイ単位の SLA ティア判定 — 目標ティアに必要な追加構成が推奨として表示されます' },
+  '미연결 — 티어 비적용': { en: 'Unattached — tiering not applicable', zh: '未连接 — 不适用层级', ja: '未接続 — ティア非適用' },
+  '목표': { en: 'target', zh: '目标', ja: '目標' },
+  '로케이션': { en: 'locations', zh: '个位置', ja: 'ロケーション' },
+  '이 게이트웨이는 목표 티어 요건을 충족합니다 — 권고 없음': { en: 'This gateway meets the target tier — no recommendations', zh: '该网关已满足目标层级要求 — 无建议', ja: 'このゲートウェイは目標ティア要件を満たしています — 推奨なし' },
+  '베스트 프랙티스 점검': { en: 'Best-practice checks', zh: '最佳实践检查', ja: 'ベストプラクティス点検' },
+  'DX Resiliency Toolkit · Well-Architected 신뢰성 기둥 기준 — 게이트웨이에 귀속되지 않는 전역 항목 포함': { en: 'Based on the DX Resiliency Toolkit and the Well-Architected Reliability Pillar — includes global items not tied to a gateway', zh: '基于 DX Resiliency Toolkit 与 Well-Architected 可靠性支柱 — 包含不归属于网关的全局项目', ja: 'DX Resiliency Toolkit・Well-Architected 信頼性の柱に基づく — ゲートウェイに紐付かないグローバル項目を含む' },
+  '전역 점검 항목 없음': { en: 'No global check items', zh: '无全局检查项目', ja: 'グローバル点検項目なし' },
+  'High 목표': { en: 'Target: High', zh: '目标：High', ja: '目標：High' },
+  'Maximum 목표': { en: 'Target: Maximum', zh: '目标：Maximum', ja: '目標：Maximum' },
   // ---- common UI ----
   '전체': { en: 'All', zh: '全部', ja: 'すべて' },
   '전체 계정': { en: 'All accounts', zh: '全部账号', ja: '全アカウント' },
