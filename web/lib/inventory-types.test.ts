@@ -17,7 +17,7 @@ describe('INVENTORY_TYPES registry', () => {
     expect(keys).toContain('apigatewayv2_route'); expect(keys).toContain('alb_listener_rule');
     // security findings source (denial-safe S3 public-access sync)
     expect(keys).toContain('s3_public_access');
-    expect(keys.length).toBe(41);
+    expect(keys.length).toBe(44);
   });
   it('every type has a label, group, and >=1 column', () => {
     for (const [k, v] of Object.entries(INVENTORY_TYPES)) {
@@ -98,7 +98,7 @@ describe('navTree (sidebar IA hierarchy)', () => {
     const placed = tree.flatMap((g) => invTypesOf(g.slug));
     expect(new Set(placed).size).toBe(placed.length); // no duplicates
     expect(new Set(placed)).toEqual(new Set(Object.keys(INVENTORY_TYPES)));
-    expect(placed.length).toBe(41);
+    expect(placed.length).toBe(44);
   });
 
   it('Compute nests the EKS family as a feature-link subgroup + the ECS subgroup', () => {
@@ -120,7 +120,7 @@ describe('navTree (sidebar IA hierarchy)', () => {
     expect(n.subgroups.find((s) => s.key === 'apiGateway')!.items.map((l) => l.type))
       .toEqual(['apigatewayv2_api', 'apigatewayv2_integration', 'apigatewayv2_route']);
     const direct = n.items.filter((l) => l.kind === 'inventory').map((l) => l.type);
-    expect(direct).toEqual(['vpc', 'subnet', 'route_table', 'nat_gateway', 'internet_gateway', 'transit_gateway', 'security_group', 'route53', 'cloudfront', 'cloudfront_vpc_origin']);
+    expect(direct).toEqual(['vpc', 'subnet', 'route_table', 'nat_gateway', 'internet_gateway', 'transit_gateway', 'dx_connection', 'dx_gateway', 'dx_vif', 'security_group', 'route53', 'cloudfront', 'cloudfront_vpc_origin']);
   });
 
   it('Monitoring is a singleton (flat, no overview href)', () => {

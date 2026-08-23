@@ -214,6 +214,37 @@ export const INVENTORY_TYPES: Record<string, InvType> = {
     ],
     filterKeys: ['region', 'amazon_side_asn'] },
 
+  // ---- Direct Connect (W2 absorption — SDK sync, plan docs/plans/2026-08-22-dx-resilience-plan.md) ----
+  dx_connection: { label: 'DX Connections', group: 'Network', stateKey: 'state', distKey: 'location', distKey2: 'bandwidth', columns: [
+    { key: 'state', label: 'State' }, { key: 'location', label: 'Location' },
+    { key: 'bandwidth', label: 'Bandwidth' }, { key: 'partner_name', label: 'Partner' } ],
+    sections: [
+      { label: 'Identity', keys: ['resource_id', 'name', 'account_id', 'region', 'location', 'partner_name'] },
+      { label: 'Config', keys: ['state', 'bandwidth', 'vlan', 'lag_id', 'jumbo_frame_capable'] },
+      { label: 'AWS Device', keys: ['aws_device', 'aws_logical_device_id'] },
+      { label: 'Tags', keys: ['tags'] },
+    ],
+    filterKeys: ['region', 'location', 'bandwidth', 'partner_name'] },
+  dx_gateway: { label: 'DX Gateways', group: 'Network', stateKey: 'state', distKey: 'state', columns: [
+    { key: 'state', label: 'State' }, { key: 'amazon_side_asn', label: 'Amazon ASN' },
+    { key: 'owner_account', label: 'Owner' } ],
+    sections: [
+      { label: 'Identity', keys: ['resource_id', 'name', 'account_id', 'owner_account'] },
+      { label: 'Config', keys: ['state', 'amazon_side_asn'] },
+      { label: 'Associations', keys: ['associations'] },
+    ],
+    filterKeys: ['state', 'amazon_side_asn'] },
+  dx_vif: { label: 'DX Virtual Interfaces', group: 'Network', stateKey: 'state', distKey: 'vif_type', distKey2: 'region', columns: [
+    { key: 'state', label: 'State' }, { key: 'vif_type', label: 'Type' },
+    { key: 'connection_id', label: 'Connection' }, { key: 'vlan', label: 'VLAN' } ],
+    sections: [
+      { label: 'Identity', keys: ['resource_id', 'name', 'account_id', 'region', 'location', 'owner_account'] },
+      { label: 'Config', keys: ['state', 'vif_type', 'vlan', 'asn'] },
+      { label: 'Attachment', keys: ['connection_id', 'dx_gateway_id', 'virtual_gateway_id'] },
+      { label: 'BGP', keys: ['bgp_peers'] },
+    ],
+    filterKeys: ['region', 'vif_type', 'location'] },
+
   iam_role: { label: 'IAM Roles', group: 'Security', distKey: 'path', columns: [
     { key: 'create_date', label: 'Created' }, { key: 'path', label: 'Path' },
     { key: 'role_id', label: 'Role ID' }, { key: 'max_session_duration', label: 'Max session(s)' } ],
@@ -497,7 +528,7 @@ const GROUPS: Record<string, GroupMeta> = {
   },
   'Network': {
     slug: 'network', labelKey: 'group.network', splitKeys: ['sgOpenIngress'],
-    order: ['vpc', 'subnet', 'route_table', 'nat_gateway', 'internet_gateway', 'transit_gateway', 'security_group', 'route53', 'cloudfront', 'cloudfront_vpc_origin'],
+    order: ['vpc', 'subnet', 'route_table', 'nat_gateway', 'internet_gateway', 'transit_gateway', 'dx_connection', 'dx_gateway', 'dx_vif', 'security_group', 'route53', 'cloudfront', 'cloudfront_vpc_origin'],
     // Network Flow Monitor (nfm-dashboard 이식): NFM 온보딩(모니터) 시 플로우 top-contributors 조회.
     injected: [
       { key: 'network-flow', href: '/network-flow', labelKey: 'nav.networkFlow' },

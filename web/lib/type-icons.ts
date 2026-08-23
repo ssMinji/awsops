@@ -3,7 +3,8 @@ import {
   DatabaseZap, Radio, Network, Split, BrickWall, Scale, Target, Globe, ListFilter,
   FileSearch, Bell, BellRing, KeyRound, Users, Shield, Activity,
   AlertTriangle, AlertCircle, CheckCircle2, Circle, CircleOff, CircleStop,
-  MapPin, Lock, LockOpen, Copy, Clock, Layers, Hash, Share2, Route, ArrowLeftRight, Waypoints, type LucideIcon,
+  MapPin, Lock, LockOpen, Copy, Clock, Layers, Hash, Share2, Route, ArrowLeftRight, Waypoints, Cable,
+  type LucideIcon,
 } from 'lucide-react';
 
 // v1-parity KPI glyphs (v1 StatsCard used lucide icons in a translucent corner box, not emoji).
@@ -20,6 +21,7 @@ export const TYPE_ICON: Record<string, LucideIcon> = {
   iam_role: KeyRound, iam_user: Users, route53: Globe,
   neptune_cluster: Share2, opensearch_serverless: Search,
   route_table: Route, nat_gateway: ArrowLeftRight, internet_gateway: Globe, transit_gateway: Waypoints,
+  dx_connection: Cable, dx_gateway: Waypoints, dx_vif: Network,
   apigatewayv2_api: Network, apigatewayv2_stage: Network,
 };
 
