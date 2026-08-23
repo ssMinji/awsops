@@ -21,17 +21,25 @@ const COLORS: Record<string, [string, string]> = {
   vpc: ['#E7EDFB', '#4F6BED'],
   subnet: ['#EAF3EE', '#3F9D6B'],
   sg: ['#FBEFE0', '#C9842B'],
+  // Direct Connect (W2 absorption) — 온프레미스 경계 킨드는 보라 계열로 구분
+  dx_connection: ['#F1EAFB', '#7C5CBF'],
+  dx_gateway: ['#EDE7F8', '#5B3FA8'],
+  dx_vif: ['#F5F0FC', '#9B7EDB'],
+  vgw: ['#EAF1F5', '#4B7A99'],
 };
 const RESOURCE = ['#EEF0F2', '#9AA6B2'] as const;
 const HILITE = '#D13212';
 
 const relLabel: Record<string, string> = {
   'infra:in_vpc': 'in vpc', 'infra:in_subnet': 'in subnet', 'infra:uses_sg': 'uses sg',
+  'infra:on_connection': 'on connection', 'infra:attached_to': 'attached to', 'infra:associated': 'associated',
 };
 
 const LEGEND: { kind: string; label: string }[] = [
   { kind: 'vpc', label: 'VPC' }, { kind: 'subnet', label: 'Subnet' },
-  { kind: 'sg', label: 'Security Group' }, { kind: '_res', label: '리소스' },
+  { kind: 'sg', label: 'Security Group' }, { kind: 'dx_connection', label: 'DX Connection' },
+  { kind: 'dx_gateway', label: 'DX Gateway' }, { kind: 'dx_vif', label: 'DX VIF' },
+  { kind: '_res', label: '리소스' },
 ];
 
 /** 계정 전체 인프라 배치 그래프 (v1 Infra Graph View parity) — materialized infra 그래프 전체 렌더. */

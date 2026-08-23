@@ -61,3 +61,44 @@ describe('buildInfraGraph', () => {
     expect(g.nodes.find((n) => n.id === 'alb:my-lb')?.meta).not.toHaveProperty('host');
   });
 });
+
+describe('buildInfraGraph — Direct Connect absorption (W2)', () => {
+  const base = { vpcs: [], subnets: [], securityGroups: [] };
+  const dxRows = [
+    { resource_type: 'dx_gateway', resource_id: 'dxgw-1', data: { name: 'hub', associations: [
+      { gateway_id: 'tgw-1', gateway_type: 'transitGateway' },
+      { gateway_id: 'vgw-9', gateway_type: 'virtualPrivateGateway' },
+    ] } },
+    { resource_type: 'dx_connection', resource_id: 'dxcon-1', data: { name: 'prod-dx', location: 'SEL1' } },
+    { resource_type: 'dx_vif', resource_id: 'dxvif-1', data: { name: 'tvif', connection_id: 'dxcon-1', dx_gateway_id: 'dxgw-1' } },
+  ];
+
+  it('links vif -> connection/gateway and gateway -> tgw/vgw from embedded associations', () => {
+    const g = buildInfraGraph({ ...base, resources: dxRows });
+    const ids = new Set(g.nodes.map((n) => n.id));
+    for (const id of ['dx_gateway:dxgw-1', 'dx_connection:dxcon-1', 'dx_vif:dxvif-1', 'transit_gateway:tgw-1', 'vgw:vgw-9']) {
+      expect(ids.has(id), id).toBe(true);
+    }
+    const rels = g.edges.map((e) => `${e.rel}:${e.source}->${e.target}`);
+    expect(rels).toContain('infra:on_connection:dx_vif:dxvif-1->dx_connection:dxcon-1');
+    expect(rels).toContain('infra:attached_to:dx_vif:dxvif-1->dx_gateway:dxgw-1');
+    expect(rels).toContain('infra:associated:dx_gateway:dxgw-1->transit_gateway:tgw-1');
+    expect(rels).toContain('infra:associated:dx_gateway:dxgw-1->vgw:vgw-9');
+  });
+
+  it('uses inventory names for dx nodes and does not route them through placement rules', () => {
+    const g = buildInfraGraph({ ...base, resources: dxRows });
+    const gw = g.nodes.find((n) => n.id === 'dx_gateway:dxgw-1');
+    expect(gw?.label).toBe('hub');
+    expect(gw?.kind).toBe('dx_gateway');
+    // placement 엣지(in_vpc 등)는 생기지 않아야 함
+    expect(g.edges.every((e) => !e.rel.includes('in_vpc'))).toBe(true);
+  });
+
+  it('a vif referencing a hosted connection still creates the connection stub node', () => {
+    const g = buildInfraGraph({ ...base, resources: [
+      { resource_type: 'dx_vif', resource_id: 'dxvif-h', data: { connection_id: 'dxcon-hosted' } },
+    ] });
+    expect(g.nodes.some((n) => n.id === 'dx_connection:dxcon-hosted')).toBe(true);
+  });
+});

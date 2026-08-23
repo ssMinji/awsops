@@ -53,8 +53,40 @@ export function buildInfraGraph(input: InfraInput): InfraGraph {
     });
   }
 
-  // 2) resource nodes + placement edges (only resources that actually carry network context)
+  // 2) Direct Connect — 온프레미스 경계까지 맵 연장 (W2 absorption; DX rows는 vpc/subnet/sg
+  //    placement 필드가 없어 아래 3)의 continue에 걸리므로 관계 엣지를 여기서 전담한다):
+  //    dx_vif —on_connection→ dx_connection, dx_vif —attached_to→ dx_gateway/vgw,
+  //    dx_gateway —associated→ transit_gateway/vgw (sync가 data.associations에 내장).
+  const DX_TYPES = new Set(['dx_connection', 'dx_gateway', 'dx_vif']);
   for (const r of input.resources) {
+    const t = str(r.resource_type);
+    if (!DX_TYPES.has(t)) continue;
+    const d = (r.data ?? {}) as Record<string, unknown>;
+    const rid = `${t}:${str(r.resource_id)}`;
+    addNode(rid, t, nameOf(r), { invType: t, resourceId: str(r.resource_id) });
+    if (t === 'dx_vif') {
+      const connId = str(d.connection_id);
+      if (connId) { addNode(`dx_connection:${connId}`, 'dx_connection', connId); addEdge(rid, `dx_connection:${connId}`, 'infra:on_connection'); }
+      const dxgwId = str(d.dx_gateway_id);
+      if (dxgwId) { addNode(`dx_gateway:${dxgwId}`, 'dx_gateway', dxgwId); addEdge(rid, `dx_gateway:${dxgwId}`, 'infra:attached_to'); }
+      const vgwId = str(d.virtual_gateway_id);
+      if (vgwId) { addNode(`vgw:${vgwId}`, 'vgw', vgwId); addEdge(rid, `vgw:${vgwId}`, 'infra:attached_to'); }
+    }
+    if (t === 'dx_gateway') {
+      for (const a of Array.isArray(d.associations) ? d.associations : []) {
+        const ao = (a ?? {}) as Record<string, unknown>;
+        const gid = str(ao.gateway_id);
+        if (!gid) continue;
+        const kind = str(ao.gateway_type) === 'transitGateway' ? 'transit_gateway' : 'vgw';
+        addNode(`${kind}:${gid}`, kind, gid);
+        addEdge(rid, `${kind}:${gid}`, 'infra:associated');
+      }
+    }
+  }
+
+  // 3) resource nodes + placement edges (only resources that actually carry network context)
+  for (const r of input.resources) {
+    if (DX_TYPES.has(str(r.resource_type))) continue; // 위 2)에서 전담
     const d = (r.data ?? {}) as Record<string, unknown>;
     const vpcId = str(d.vpc_id);
     const subnetIds = [...new Set([...idsFrom(d.subnet_id), ...idsFrom(d.subnet_ids), ...idsFrom(d.subnets), ...idsFrom(d.availability_zones)])];
