@@ -17,6 +17,7 @@
     "@aws-sdk/client-cloudwatch": "^3.1064.0",
     "@aws-sdk/client-cloudwatch-logs": "^3.1101.0",
     "@aws-sdk/client-cost-explorer": "^3.1062.0",
+    "@aws-sdk/client-direct-connect": "^3.1116.0",
     "@aws-sdk/client-ec2": "^3.1101.0",
     "@aws-sdk/client-ecr": "^3.1090.0",
     "@aws-sdk/client-eks": "^3.1062.0",

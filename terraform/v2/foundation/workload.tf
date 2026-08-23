@@ -135,6 +135,20 @@ resource "aws_iam_role_policy" "task_metrics" {
         "ec2:SearchTransitGatewayRoutes",
         # /vpc-endpoints: 엔드포인트 리스트+분석 (PrivateLink 메트릭 미사용 감지)
         "ec2:DescribeVpcEndpoints",
+        # /api/dx/topology: Direct Connect 복원력 발견 (전부 read-only Describe —
+        # docs/plans/2026-08-22-dx-resilience-plan.md W1)
+        "directconnect:DescribeConnections",
+        "directconnect:DescribeVirtualInterfaces",
+        "directconnect:DescribeDirectConnectGateways",
+        "directconnect:DescribeDirectConnectGatewayAssociations",
+        "directconnect:DescribeDirectConnectGatewayAttachments",
+        "directconnect:DescribeLags",
+        "directconnect:DescribeLocations",
+        # DX 경로의 하이브리드 리소스: VPN 백업·CGW·TGW 존재/상태 (read-only)
+        "ec2:DescribeVpnGateways",
+        "ec2:DescribeVpnConnections",
+        "ec2:DescribeCustomerGateways",
+        "ec2:DescribeTransitGateways",
       ]
       Resource = "*"
       }, {
