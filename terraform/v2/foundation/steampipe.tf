@@ -34,7 +34,7 @@ resource "aws_iam_role_policy" "execution_steampipe_secret" {
   name  = "${var.project}-exec-steampipe-secret"
   role  = aws_iam_role.execution.id
   policy = jsonencode({
-    Version = "2012-10-17"
+    Version   = "2012-10-17"
     Statement = [{ Effect = "Allow", Action = ["secretsmanager:GetSecretValue"], Resource = [aws_secretsmanager_secret.steampipe[0].arn] }]
   })
 }
@@ -134,7 +134,7 @@ resource "aws_iam_role_policy" "steampipe_task" {
         "elasticache:Describe*", "elasticache:ListTagsForResource",
         "es:Describe*", "es:List*",
         "kafka:Describe*", "kafka:List*",
-        "eks:Describe*", "eks:List*",  # aws-data/eks-optimize 콜렉터: aws_eks_cluster 등 EKS 테이블
+        "eks:Describe*", "eks:List*", # aws-data/eks-optimize 콜렉터: aws_eks_cluster 등 EKS 테이블
         "wafv2:List*", "wafv2:Get*",
         "cloudwatch:Describe*",
         "cloudtrail:Describe*", "cloudtrail:List*", "cloudtrail:GetTrailStatus", "cloudtrail:GetEventSelectors", "cloudtrail:GetInsightSelectors",
@@ -195,7 +195,7 @@ resource "aws_ecs_task_definition" "steampipe" {
       { name = "STEAMPIPE_DATABASE_PASSWORD", valueFrom = aws_secretsmanager_secret.steampipe[0].arn },
     ]
     healthCheck = {
-      command = ["CMD-SHELL", "steampipe query \"select 1\" >/dev/null 2>&1 || exit 1"]
+      command  = ["CMD-SHELL", "steampipe query \"select 1\" >/dev/null 2>&1 || exit 1"]
       interval = 30
       timeout  = 10
       # retries=5 (150s consecutive-failure tolerance) — NOT just the initial startup case.
@@ -323,6 +323,8 @@ resource "aws_iam_role_policy" "inv_sync" {
       # SDK-sourced alb_listener_rule sync (Steampipe rule table needs a per-listener qualifier):
       # read-only ELBv2 describe for LBs/listeners/rules. Read-only; no mutation.
       { Effect = "Allow", Action = ["elasticloadbalancing:DescribeLoadBalancers", "elasticloadbalancing:DescribeListeners", "elasticloadbalancing:DescribeRules"], Resource = "*" },
+      # dx_connection / dx_gateway / dx_vif SDK sync (W2 absorption — read-only Describe만)
+      { Effect = "Allow", Action = ["directconnect:DescribeConnections", "directconnect:DescribeVirtualInterfaces", "directconnect:DescribeDirectConnectGateways", "directconnect:DescribeDirectConnectGatewayAssociations", "directconnect:DescribeDirectConnectGatewayAttachments"], Resource = "*" },
       # SDK-sourced opensearch_serverless sync (pinned Steampipe plugin lacks the AOSS table):
       # read-only collection list/detail. Read-only; no mutation.
       { Effect = "Allow", Action = ["aoss:ListCollections", "aoss:BatchGetCollection"], Resource = "*" }

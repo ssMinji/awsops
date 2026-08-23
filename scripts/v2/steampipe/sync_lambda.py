@@ -567,12 +567,151 @@ def _fetch_opensearch_serverless(aoss=None):
     return rows, "name", "region"
 
 
+# ---- Direct Connect (W2 absorption; plan docs/plans/2026-08-22-dx-resilience-plan.md) ----------
+# Steampipe 플러그인의 DX 테이블 커버리지가 배포 이미지 버전에 따라 갈려(특히 VIF 테이블 부재)
+# alb_listener_rule 선례대로 boto3 SDK sync로 소싱한다. DX 리소스는 리전 귀속이지만 홈 리전
+# 하나만 훑으면 타 리전 DX를 놓치므로, web/lib/dx-topology.ts의 리전 발견을 축약 이식한다:
+# DXGW는 글로벌 → DXGW attachments의 virtualInterfaceRegion이 리전 단서.
+
+def _dx_regions(dx, gateway_ids):
+    """홈 리전 + DXGW attachment들이 가리키는 VIF 리전 (발견 실패는 홈 리전으로 degrade)."""
+    regions = {os.environ.get("AWS_REGION", "ap-northeast-2")}
+    for gid in gateway_ids:
+        token = None
+        while True:
+            kw = {"directConnectGatewayId": gid}
+            if token:
+                kw["nextToken"] = token
+            try:
+                res = dx.describe_direct_connect_gateway_attachments(**kw)
+            except ClientError as e:
+                print(f"dx attachments {gid} skipped: {e}")
+                break
+            for att in res.get("directConnectGatewayAttachments", []) or []:
+                if att.get("virtualInterfaceRegion"):
+                    regions.add(att["virtualInterfaceRegion"])
+            token = res.get("nextToken")
+            if not token:
+                break
+    return sorted(regions)
+
+
+def _fetch_dx_gateways():
+    # DXGW는 글로벌 — 홈 리전 클라이언트로 전량 + 게이트웨이별 associations를 data에 내장
+    # (인프라 그래프가 dx_gateway → tgw/vgw 엣지를 이 associations에서 만든다).
+    region = os.environ.get("AWS_REGION", "ap-northeast-2")
+    dx = boto3.client("directconnect", region_name=region)
+    rows = []
+    token = None
+    while True:
+        kw = {"nextToken": token} if token else {}
+        res = dx.describe_direct_connect_gateways(**kw)
+        for g in res.get("directConnectGateways", []) or []:
+            gid = g.get("directConnectGatewayId")
+            assocs = []
+            atok = None
+            while True:
+                akw = {"directConnectGatewayId": gid}
+                if atok:
+                    akw["nextToken"] = atok
+                try:
+                    ares = dx.describe_direct_connect_gateway_associations(**akw)
+                except ClientError as e:
+                    print(f"dx associations {gid} skipped: {e}")  # 한 GW 실패가 타입 전체를 비우지 않게
+                    break
+                for a in ares.get("directConnectGatewayAssociations", []) or []:
+                    ag = a.get("associatedGateway") or {}
+                    assocs.append({
+                        "association_id": a.get("associationId"),
+                        "association_state": a.get("associationState"),
+                        "gateway_id": ag.get("id"), "gateway_type": ag.get("type"),
+                        "gateway_region": ag.get("region"), "gateway_owner": ag.get("ownerAccount"),
+                    })
+                atok = ares.get("nextToken")
+                if not atok:
+                    break
+            rows.append({
+                "resource_id": gid, "region": "global", "name": g.get("directConnectGatewayName"),
+                "amazon_side_asn": g.get("amazonSideAsn"),
+                "state": g.get("directConnectGatewayState"),
+                "owner_account": g.get("ownerAccount"),
+                "associations": assocs,
+            })
+        token = res.get("nextToken")
+        if not token:
+            break
+    return rows, "resource_id", "region"
+
+
+def _fetch_dx_connections():
+    region = os.environ.get("AWS_REGION", "ap-northeast-2")
+    home = boto3.client("directconnect", region_name=region)
+    gw_ids = []
+    try:
+        gws, _, _ = _fetch_dx_gateways()
+        gw_ids = [g["resource_id"] for g in gws]
+    except ClientError as e:
+        print(f"dx gateway discovery for connections skipped: {e}")
+    rows = []
+    for r in _dx_regions(home, gw_ids):
+        try:
+            res = boto3.client("directconnect", region_name=r).describe_connections()
+        except ClientError as e:
+            print(f"dx connections {r} skipped: {e}")
+            continue
+        for c in res.get("connections", []) or []:
+            rows.append({
+                "resource_id": c.get("connectionId"), "region": c.get("region") or r,
+                "name": c.get("connectionName"), "state": c.get("connectionState"),
+                "location": c.get("location"), "bandwidth": c.get("bandwidth"),
+                "lag_id": c.get("lagId"), "partner_name": c.get("partnerName"), "vlan": c.get("vlan"),
+                "aws_device": c.get("awsDeviceV2"), "aws_logical_device_id": c.get("awsLogicalDeviceId"),
+                "jumbo_frame_capable": c.get("jumboFrameCapable"),
+                "tags": {t.get("key"): t.get("value") for t in (c.get("tags") or [])},
+            })
+    return rows, "resource_id", "region"
+
+
+def _fetch_dx_vifs():
+    region = os.environ.get("AWS_REGION", "ap-northeast-2")
+    home = boto3.client("directconnect", region_name=region)
+    gw_ids = []
+    try:
+        gws, _, _ = _fetch_dx_gateways()
+        gw_ids = [g["resource_id"] for g in gws]
+    except ClientError as e:
+        print(f"dx gateway discovery for vifs skipped: {e}")
+    rows = []
+    for r in _dx_regions(home, gw_ids):
+        try:
+            res = boto3.client("directconnect", region_name=r).describe_virtual_interfaces()
+        except ClientError as e:
+            print(f"dx vifs {r} skipped: {e}")
+            continue
+        for v in res.get("virtualInterfaces", []) or []:
+            rows.append({
+                "resource_id": v.get("virtualInterfaceId"), "region": v.get("region") or r,
+                "name": v.get("virtualInterfaceName"), "state": v.get("virtualInterfaceState"),
+                "vif_type": v.get("virtualInterfaceType"), "vlan": v.get("vlan"), "asn": v.get("asn"),
+                "connection_id": v.get("connectionId"),
+                "dx_gateway_id": v.get("directConnectGatewayId"),
+                "virtual_gateway_id": v.get("virtualGatewayId"),
+                "location": v.get("location"), "owner_account": v.get("ownerAccount"),
+                "bgp_peers": [{"state": p.get("bgpPeerState"), "status": p.get("bgpStatus"), "asn": p.get("asn")}
+                              for p in (v.get("bgpPeers") or [])],
+            })
+    return rows, "resource_id", "region"
+
+
 SDK_SYNCS = {
     "s3": _fetch_s3_security,
     "opensearch_serverless": _fetch_opensearch_serverless,
     "cloudfront_vpc_origin": _fetch_cloudfront_vpc_origins,
     "alb_listener_rule": _fetch_alb_listener_rules,
     "s3_public_access": _fetch_s3_public_access,
+    "dx_connection": _fetch_dx_connections,
+    "dx_gateway": _fetch_dx_gateways,
+    "dx_vif": _fetch_dx_vifs,
 }
 _ALLOWED = set(QUERIES) | set(SDK_SYNCS)
 _sm = boto3.client("secretsmanager", region_name=os.environ.get("AWS_REGION", "ap-northeast-2"))
