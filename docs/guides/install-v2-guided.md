@@ -135,6 +135,8 @@ v1 Cognito 사용자 명단과 v2 pool을 대조하고 **실제 로그인 성공
 
 ## 알려진 함정 / Known Traps
 
+> 이 표는 repo 루트 `CLAUDE.md`의 "알려진 이슈"를 미러링한다(Kiro 등 `CLAUDE.md`를 로드하지 않는 도구를 위한 사본). 새 함정을 배우면 **두 곳을 함께 갱신**한다.
+
 | 증상 | 원인 → 조치 |
 |------|-----------|
 | CloudFront 접속 시 504 | CF→ALB는 TLS end-to-end 필요: VPC Origin `https-only` + origin domain=공개 FQDN(SNI), ALB SG는 `CloudFront-VPCOrigins-Service-SG`에서 443 허용 |
