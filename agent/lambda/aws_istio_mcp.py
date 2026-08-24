@@ -7,6 +7,8 @@ Istio 서비스 메시 MCP Lambda - Steampipe Kubernetes CRD 테이블 + EKS API
 """
 import json
 import os
+import re
+
 import pg8000
 
 from cross_account import resolve_tool_name
@@ -63,7 +65,11 @@ def lambda_handler(event, context):
         args = params
 
     try:
-        namespace = args.get("namespace", "")
+        namespace = str(args.get("namespace", "") or "")
+        # run_sql has no parameterized path, so an RFC 1123 label allowlist is the injection guard.
+        # run_sql에는 파라미터 바인딩 경로가 없으므로 RFC 1123 레이블 허용목록이 인젝션 가드입니다.
+        if namespace and not re.fullmatch(r"[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?", namespace):
+            return err("invalid namespace: {}".format(namespace[:80]))
         ns_filter = "WHERE namespace = '{}'".format(namespace) if namespace else ""
 
         # Get Istio mesh overview: CRDs, injected namespaces, sidecar pods / Istio 메시 개요 조회: CRD, 주입된 네임스페이스, 사이드카 파드
