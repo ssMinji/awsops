@@ -3,8 +3,8 @@
 
 # AWSops v2 — 안내식 설치 워크플로우 / Guided Installation Workflow
 
-AWSops v2를 사용자의 AWS 계정에 설치한다. **신규 설치**와 **v1→v2 마이그레이션** 두 시나리오를 지원하며, 시작할 때 사용자가 선택한다.
-Installs AWSops v2 into the user's AWS account. Supports two scenarios — **fresh install** and **v1→v2 migration** — chosen by the user up front.
+AWSops v2를 사용자의 AWS 계정에 설치한다. **신규 설치**, **v1→v2 마이그레이션**, **v1 제거 후 신규 설치** 세 시나리오를 지원하며, 시작할 때 사용자가 선택한다.
+Installs AWSops v2 into the user's AWS account. Supports three scenarios — **fresh install**, **v1→v2 migration**, and **remove-v1-then-reinstall** — chosen by the user up front.
 
 ## 진행 원칙 / Ground Rules
 
@@ -20,11 +20,21 @@ Installs AWSops v2 into the user's AWS account. Supports two scenarios — **fre
 
 - **A. 신규 설치** — 이 계정에 AWSops가 처음.
 - **B. v1 → v2 마이그레이션** — v1(EC2/CDK/Steampipe, `/awsops` 경로)을 운영 중이고, 데이터·사용자·도메인을 v2로 넘기고 싶다.
+- **C. v1 제거 후 신규 설치** — v1을 운영 중이지만 이력 이관 없이 v1을 걷어내고 v2만 새로 설치하고 싶다.
 
 판별을 돕는 자동 힌트(참고용, 선택을 대체하지 않음): v1 흔적 = CDK 스택(`aws cloudformation list-stacks`에 v1 스택), `/awsops` basePath로 서빙 중인 CloudFront, EC2의 `data/*.json`.
 
 - **A 선택** → 1~6단계 진행 후 종료.
 - **B 선택** → 1~6단계(v2를 v1과 **병행으로** 새로 설치) 후 7단계(마이그레이션)로 계속. v1은 컷오버 전까지 건드리지 않는다.
+- **C 선택** → 0-C단계(v1 제거 게이트) 통과 후 A와 동일하게 1~6단계 진행.
+
+## 0-C. v1 제거 (시나리오 C 전용) / Remove v1 First
+
+v2 설치 자체는 A와 완전히 동일하다 — 시작 전에 아래 세 게이트만 통과한다:
+
+1. **이력 소실 확인**: v1의 인벤토리/비용 스냅샷과 진단 이력은 EC2와 함께 **영구 삭제**된다. 이 사실을 고지하고 사용자에게 명시적으로 확인받는다. 이력이 필요하면 시나리오 B로 전환하거나, 최소한 EC2의 `data/` 디렉토리 사본을 떠 둔다(사후 이관: `docs/runbooks/v1-to-v2-aurora-backfill.md`).
+2. **v1 스택 삭제**: `docs/runbooks/v1-decommission.md`의 삭제 절차를 따른다(alert 경로의 외부 수신자 확인 게이트 포함). CDK 스택 destroy 완료 후 **v1 CloudFront distribution이 삭제(또는 별칭 해제)됐는지 확인**한다 — 비활성화→삭제에 수 분이 걸린다.
+3. **재활용 자산 확인**: Route53 hosted zone은 삭제되지 않으며 v2가 그대로 재사용한다(2단계 configure에서 기존 존 선택). 기존 VPC와 타깃 계정들의 `AWSopsReadOnlyRole`도 유지·재활용된다. 같은 도메인 이름을 쓰려면 2번의 v1 CloudFront 별칭 해제가 선행돼야 한다(함정 표 `CNAMEAlreadyExists` 참조). Cognito 사용자만은 유지 방법이 없다 — 4단계에서 재등록한다.
 
 ## 1. 사전 점검 / Prerequisites
 
@@ -135,8 +145,6 @@ v1 Cognito 사용자 명단과 v2 pool을 대조하고 **실제 로그인 성공
 
 ## 알려진 함정 / Known Traps
 
-> 이 표는 repo 루트 `CLAUDE.md`의 "알려진 이슈"를 미러링한다(Kiro 등 `CLAUDE.md`를 로드하지 않는 도구를 위한 사본). 새 함정을 배우면 **두 곳을 함께 갱신**한다.
-
 | 증상 | 원인 → 조치 |
 |------|-----------|
 | CloudFront 접속 시 504 | CF→ALB는 TLS end-to-end 필요: VPC Origin `https-only` + origin domain=공개 FQDN(SNI), ALB SG는 `CloudFront-VPCOrigins-Service-SG`에서 443 허용 |
@@ -146,6 +154,7 @@ v1 Cognito 사용자 명단과 v2 pool을 대조하고 **실제 로그인 성공
 | SSM 파라미터 생성 거부 | `/aws...` 경로는 예약 — `/ops/<project>/...` 유지 |
 | SG 변경 시 apply hang | SG `description`은 불변 — ALB에 물린 SG replace로 멈춤. ingress만 수정, description 유지 |
 | terraform이 Aurora 재생성 시도 | `engine_version`은 정확한 minor(예: `17.9`)로 핀 — "17"만 쓰면 오작동 |
+| v2 apply 시 `CNAMEAlreadyExists` | 같은 별칭(CNAME)이 아직 v1 CloudFront에 붙어 있음(전역 유일 제약) — v1 배포판 삭제/별칭 해제 완료 후 재시도 (시나리오 C 0-C단계 / 시나리오 B는 7.4 컷오버 절차로) |
 
 더 깊은 문제: `docs/guides/troubleshooting.md`, `docs/runbooks/`.
 
